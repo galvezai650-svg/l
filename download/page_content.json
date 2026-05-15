@@ -1,0 +1,24 @@
+{
+  "code": 200,
+  "data": {
+    "description": "",
+    "external": {},
+    "html": "<html lang=\"en\"><head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>Failed</title>\n    <style>\n        * {\n            margin: 0;\n            padding: 0;\n            box-sizing: border-box;\n        }\n\n        body {\n            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n            min-height: 100vh;\n            display: flex;\n            align-items: center;\n            justify-content: center;\n        }\n\n        .container {\n            display: flex;\n            flex-direction: column;\n            align-items: center;\n            justify-content: center;\n            min-height: 100vh;\n            gap: 16px;\n            padding: 16px;\n            text-align: center;\n        }\n\n        .logo-container {\n            width: 168px;\n            height: 168px;\n        }\n\n        .logo {\n            width: 100%;\n            height: 100%;\n            object-fit: contain;\n        }\n\n        .text-container {\n            max-width: 400px;\n        }\n\n        .title {\n            font-family: MiSans;\n            font-weight: 400;\n            font-style: Regular;\n            font-size: 14px;\n            line-height: 22px;\n            letter-spacing: 0%;\n            text-align: center;\n            vertical-align: middle;\n            opacity: 0.6;\n            margin-bottom: 4px;\n        }\n\n        .continue-button {\n            margin-top: 12px;\n            background: linear-gradient(124.94deg, #191A1D 11.04%, #747689 96.98%, #191A1D 164.2%);\n            width: 88px;\n            height: 40px;\n            min-width: 64px;\n            opacity: 1;\n            border-radius: 8px;\n            padding: 0 16px;\n            display: flex;\n            align-items: center;\n            justify-content: center;\n            color: #F8FAFC;\n            text-decoration: none;\n            font-size: 14px;\n            font-weight: 400;\n            letter-spacing: 0%;\n            transition: all 0.3s ease;\n        }\n\n        .continue-button:hover {\n            background: linear-gradient(124.94deg, #2A2B2F 11.04%, #8A8B9E 96.98%, #2A2B2F 164.2%);\n            transform: translateY(-1px);\n            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);\n        }\n    </style>\n</head>\n\n<body>\n    <div class=\"container\">\n        <!-- Logo -->\n        <div class=\"logo-container\">\n            <img src=\"https://z-cdn.chatglm.cn/z-ai/static/deploy-failed.svg\" alt=\"Z.ai Logo\" class=\"logo\">\n        </div>\n\n        <!-- 文字 -->\n        <div class=\"text-container\">\n            <p class=\"title\">\n                Sorry, there was a problem deploying the code.\n            </p>\n            <p class=\"title\">\n                You can return to the generation page to try again.\n            </p>\n        </div>\n    </div>\n\n\n</body></html>",
+    "metadata": {
+      "lang": "en",
+      "viewport": "width=device-width, initial-scale=1.0"
+    },
+    "title": "Failed",
+    "url": "https://n186t36xxzf0-.space.z.ai/",
+    "usage": {
+      "tokens": 709
+    },
+    "warning": "Target URL returned error 500: Internal Server Error"
+  },
+  "meta": {
+    "usage": {
+      "tokens": 709
+    }
+  },
+  "status": 20000
+}
