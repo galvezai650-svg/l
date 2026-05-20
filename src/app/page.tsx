@@ -1,12 +1,11 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Loader2 } from 'lucide-react';
 
 const TARGET_BASE = 'https://n186t36xx-.space-z.ai';
 
 export default function Home() {
-  const [html, setHtml] = useState<string | null>(null);
+  const [html, setHtml] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [currentPath, setCurrentPath] = useState('/');
   const [retryCount, setRetryCount] = useState(0);
@@ -16,20 +15,20 @@ export default function Home() {
     try {
       const res = await fetch(`/api/proxy?path=${encodeURIComponent(path)}`);
       const text = await res.text();
-      setHtml(text);
+      if (text) {
+        setHtml(text);
+      }
     } catch {
-      setHtml(null);
+      // ignore
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Fetch on mount and when path changes
   useEffect(() => {
     fetchPage(currentPath);
   }, [currentPath, retryCount, fetchPage]);
 
-  // Listen for messages from the iframe
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'proxy-navigate' && event.data?.url) {
@@ -39,11 +38,10 @@ export default function Home() {
           if (urlObj.origin === new URL(TARGET_BASE).origin) {
             setCurrentPath(path);
           } else {
-            // External link - open in new tab
             window.open(event.data.url, '_blank', 'noopener,noreferrer');
           }
         } catch {
-          window.open(event.data.url, '_blank', 'noopener,noreferrer');
+          window.open(event.data.url as string, '_blank', 'noopener,noreferrer');
         }
       }
       if (event.data?.type === 'proxy-retry') {
@@ -55,44 +53,55 @@ export default function Home() {
   }, []);
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', margin: 0, padding: 0, overflow: 'hidden' }}>
+    <>
+      <style>{`
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow: hidden; }
+        .full-frame { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; border: none; display: block; }
+        .loader-overlay {
+          position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+          display: flex; align-items: center; justify-content: center;
+          background: #fff; z-index: 9999; flex-direction: column; gap: 12px;
+        }
+        .spinner {
+          width: 36px; height: 36px; border: 3px solid #e0e0e0;
+          border-top-color: #333; border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .error-screen {
+          display: flex; align-items: center; justify-content: center;
+          height: 100vh; font-family: system-ui; color: #666;
+          flex-direction: column; gap: 12px;
+        }
+        .retry-btn {
+          padding: 8px 20px; border: none; border-radius: 8px;
+          background: #333; color: #fff; cursor: pointer; font-size: 14px;
+        }
+        .retry-btn:hover { background: #555; }
+      `}</style>
       {loading && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: '#fff', zIndex: 9999, flexDirection: 'column', gap: '12px'
-        }}>
-          <Loader2 style={{ width: 32, height: 32, animation: 'spin 1s linear infinite', color: '#666' }} />
+        <div className="loader-overlay">
+          <div className="spinner" />
           <span style={{ color: '#666', fontSize: '14px' }}>Cargando página...</span>
         </div>
       )}
       {html && (
         <iframe
           srcDoc={html}
-          style={{ width: '100vw', height: '100vh', border: 'none', display: 'block' }}
+          className="full-frame"
           title="Page Viewer"
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
         />
       )}
       {!html && !loading && (
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          height: '100vh', fontFamily: 'system-ui', color: '#666',
-          flexDirection: 'column', gap: '12px'
-        }}>
+        <div className="error-screen">
           <p>No se pudo cargar la página</p>
-          <button
-            onClick={() => setRetryCount((c) => c + 1)}
-            style={{
-              padding: '8px 20px', border: 'none', borderRadius: '8px',
-              background: '#333', color: '#fff', cursor: 'pointer', fontSize: '14px'
-            }}
-          >
+          <button className="retry-btn" onClick={() => setRetryCount((c) => c + 1)}>
             Reintentar
           </button>
         </div>
       )}
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-    </div>
+    </>
   );
 }
