@@ -7,7 +7,7 @@ const TARGET_BASE = 'https://n186t36xx-.space-z.ai';
 // In-memory cache for HTML pages
 let cachedHtml: string | null = null;
 
-// Asset cache (fonts, css, js, images)
+// Asset cache (fonts, css, js, images, api responses)
 const assetCache = new Map<string, { data: ArrayBuffer | string; contentType: string; timestamp: number }>();
 const ASSET_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
@@ -35,12 +35,12 @@ function modifyHtml(html: string): string {
   // Rewrite /_next/ paths in href, src, srcset to go through our proxy
   modified = modified.replace(/(href|src|srcset)="\/_next\//g, `$1="/api/proxy?path=/_next/`);
 
-  // Rewrite other relative paths (like /torneos, /noticias, etc.)
-  modified = modified.replace(/(href|src)="\/(?!\/|api\/proxy|_next|http)([^"]*)"/g, (match, attr, path) => {
+  // Rewrite other relative paths (like /torneos, /noticias, etc.) but NOT /api/ (handled by JS interceptor)
+  modified = modified.replace(/(href|src)="\/(?!\/|api\/|_next|http)([^"]*)"/g, (match, attr, path) => {
     return `${attr}="/api/proxy?path=/${path}"`;
   });
 
-  // Intercept navigation and fix URL errors
+  // Intercept navigation, fetch, and fix URL errors
   const interceptorScript = `
 <script>
 (function() {
@@ -87,13 +87,30 @@ function modifyHtml(html: string): string {
   window.URL.createObjectURL = OrigURL.createObjectURL.bind(OrigURL);
   window.URL.revokeObjectURL = OrigURL.revokeObjectURL.bind(OrigURL);
 
-  // Intercept fetch calls to rewrite URLs
+  // Intercept fetch calls to rewrite /api/ and /_next/ URLs through proxy
   var origFetch = window.fetch;
   window.fetch = function(input, init) {
-    if (typeof input === 'string' && input.startsWith('/')) {
-      input = '/api/proxy?path=' + encodeURIComponent(input);
+    if (typeof input === 'string') {
+      if (input.startsWith('/api/') || input.startsWith('/_next/')) {
+        input = '/api/proxy?path=' + encodeURIComponent(input);
+      }
+    } else if (input instanceof Request) {
+      var url = input.url;
+      if (url.startsWith(window.location.origin + '/api/') || url.startsWith(window.location.origin + '/_next/')) {
+        var path = url.replace(window.location.origin, '');
+        input = new Request('/api/proxy?path=' + encodeURIComponent(path), input);
+      }
     }
     return origFetch.call(this, input, init);
+  };
+
+  // Also intercept XMLHttpRequest
+  var origOpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function(method, url) {
+    if (typeof url === 'string' && (url.startsWith('/api/') || url.startsWith('/_next/'))) {
+      url = '/api/proxy?path=' + encodeURIComponent(url);
+    }
+    return origOpen.apply(this, arguments);
   };
 })();
 </script>
@@ -109,24 +126,18 @@ function modifyHtml(html: string): string {
 }
 
 function modifyCss(css: string, cssPath: string): string {
-  // Rewrite relative font URLs in CSS: ../media/xxx.woff2 -> /api/proxy?path=/_next/static/media/xxx.woff2
-  // Determine the base directory of the CSS file
   const cssDir = cssPath.substring(0, cssPath.lastIndexOf('/'));
 
-  // Rewrite url(../media/...) patterns
   let modified = css.replace(/url\(\.\.\/([^)]+)\)/g, (match, relPath) => {
-    // Resolve relative path against CSS directory
     const resolved = new URL(relPath, `${TARGET_BASE}${cssDir}/`).pathname;
     return `url(/api/proxy?path=${encodeURIComponent(resolved)})`;
   });
 
-  // Rewrite url(./...) patterns
   modified = modified.replace(/url\(\.\/([^)]+)\)/g, (match, relPath) => {
     const resolved = new URL(relPath, `${TARGET_BASE}${cssDir}/`).pathname;
     return `url(/api/proxy?path=${encodeURIComponent(resolved)})`;
   });
 
-  // Rewrite any remaining absolute /_next/ URLs
   modified = modified.replace(/url\(\/_next\/([^)]+)\)/g, (match, path) => {
     return `url(/api/proxy?path=${encodeURIComponent('/_next/' + path)})`;
   });
@@ -158,16 +169,59 @@ export async function GET(request: NextRequest) {
   const proxyPath = searchParams.get('path') || '/';
   const targetUrl = `${TARGET_BASE}${proxyPath.startsWith('/') ? proxyPath : '/' + proxyPath}`;
 
-  // Check if this is a static asset request
+  // API requests (JSON data from the target site's backend)
+  const isApiRequest = proxyPath.startsWith('/api/');
+
+  if (isApiRequest) {
+    // Short cache for API responses
+    const cached = assetCache.get(proxyPath);
+    if (cached && Date.now() - cached.timestamp < 60000) { // 1 minute cache for API
+      return new NextResponse(cached.data, {
+        status: 200,
+        headers: {
+          'Content-Type': cached.contentType,
+          'Cache-Control': 'public, max-age=30',
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
+    }
+
+    const response = await proxyFetch(targetUrl, {
+      Accept: 'application/json, text/plain, */*',
+    });
+    if (response) {
+      const contentType = response.headers.get('content-type') || 'application/json';
+      const data = await response.text();
+
+      assetCache.set(proxyPath, { data, contentType, timestamp: Date.now() });
+
+      return new NextResponse(data, {
+        status: response.status,
+        headers: {
+          'Content-Type': contentType,
+          'Cache-Control': 'public, max-age=30',
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
+    }
+
+    return new NextResponse(JSON.stringify({ error: 'API unavailable' }), {
+      status: 502,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
+  }
+
+  // Static assets
   const isStaticAsset = proxyPath.startsWith('/_next/') ||
     /\.(css|js|woff2?|ttf|svg|png|jpe?g|webp|ico|json|map)(\?|$)/.test(proxyPath);
 
   if (isStaticAsset) {
-    // Check asset cache first
     const cached = assetCache.get(proxyPath);
     if (cached && Date.now() - cached.timestamp < ASSET_CACHE_TTL) {
-      const data = typeof cached.data === 'string' ? cached.data : cached.data;
-      return new NextResponse(data, {
+      return new NextResponse(cached.data, {
         status: 200,
         headers: {
           'Content-Type': cached.contentType,
@@ -177,16 +231,13 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Fetch the asset
     const response = await proxyFetch(targetUrl);
     if (response && (response.ok || response.status === 304)) {
       const contentType = getContentType(targetUrl, response.headers);
 
-      // For CSS files, rewrite URLs to go through proxy
       if (contentType.includes('text/css')) {
         const cssText = await response.text();
         const modifiedCss = modifyCss(cssText, proxyPath);
-
         assetCache.set(proxyPath, { data: modifiedCss, contentType, timestamp: Date.now() });
 
         return new NextResponse(modifiedCss, {
@@ -202,7 +253,6 @@ export async function GET(request: NextRequest) {
       const data = await response.arrayBuffer();
       assetCache.set(proxyPath, { data, contentType, timestamp: Date.now() });
 
-      // Keep cache size manageable
       if (assetCache.size > 500) {
         const oldest = [...assetCache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp);
         for (let i = 0; i < 100; i++) {
@@ -226,7 +276,6 @@ export async function GET(request: NextRequest) {
   // HTML page request
   let html: string | null = null;
 
-  // Method 1: Direct fetch
   const response = await proxyFetch(targetUrl, {
     Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
   });
@@ -235,17 +284,14 @@ export async function GET(request: NextRequest) {
     if (text && text.length > 50 && text.includes('<')) html = text;
   }
 
-  // Update in-memory cache
   if (html) {
     cachedHtml = html;
   }
 
-  // Method 2: In-memory cache
   if (!html && cachedHtml) {
     html = cachedHtml;
   }
 
-  // Method 3: Local file cache
   if (!html) {
     try {
       const filePath = join(process.cwd(), 'cache', 'index.html');
@@ -266,7 +312,6 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // Fallback error page
   return new NextResponse(
     `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Sin conexión</title><style>body{font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f5f5f5;color:#333}div{text-align:center;padding:2rem}h2{margin:0 0 0.5rem}p{color:#666;margin:0}button{margin-top:16px;padding:8px 20px;border:none;border-radius:8px;background:#333;color:#fff;cursor:pointer;font-size:14px}button:hover{background:#555}</style></head><body><div><h2>No se pudo cargar la página</h2><p>El dominio no está accesible en este momento.</p><button onclick="location.reload()">Reintentar</button></div></body></html>`,
     {

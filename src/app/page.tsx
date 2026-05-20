@@ -16,7 +16,7 @@ export default function Home() {
         src="/api/proxy?path=/"
         className="full-frame"
         title="Page Viewer"
-        sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads"
       />
     </>
   );
