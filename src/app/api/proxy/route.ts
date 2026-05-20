@@ -3,7 +3,7 @@ import ZAI from 'z-ai-web-dev-sdk';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 
-const TARGET_BASE = 'https://n186t36xx-.space.z.ai';
+const TARGET_BASE = 'https://n186t36xx-.space-z.ai';
 
 // In-memory cache
 let cachedHtml: string | null = null;

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
 
-const TARGET_BASE = 'https://n186t36xx-.space.z.ai';
+const TARGET_BASE = 'https://n186t36xx-.space-z.ai';
 
 export default function Home() {
   const [html, setHtml] = useState<string | null>(null);
